@@ -20,6 +20,7 @@ extern struct obs_output_info flv_output_info;
 #if COMPILE_FTL
 extern struct obs_output_info ftl_output_info;
 #endif
+extern struct obs_output_info rm_output_info;
 
 bool obs_module_load(void)
 {
@@ -34,6 +35,7 @@ bool obs_module_load(void)
 #if COMPILE_FTL
 	obs_register_output(&ftl_output_info);
 #endif
+	obs_register_output(&rm_output_info);
 	return true;
 }
 

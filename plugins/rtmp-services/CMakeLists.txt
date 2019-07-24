@@ -3,6 +3,7 @@ project(rtmp-services)
 include_directories(${OBS_JANSSON_INCLUDE_DIRS})
 
 set(rtmp-services_SOURCES
+	remon.c
 	twitch.c
 	rtmp-common.c
 	rtmp-custom.c

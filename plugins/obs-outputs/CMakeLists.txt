@@ -153,7 +153,8 @@ set(obs-outputs_SOURCES
 	rtmp-windows.c
 	flv-output.c
 	flv-mux.c
-	net-if.c)
+	net-if.c
+	remon-output.c)
 
 add_library(obs-outputs MODULE
 	${ftl_SOURCES}
