@@ -20,6 +20,14 @@ extern QCefCookieManager *panel_cookies;
 enum class ListOpt : int {
 	ShowAll = 1,
 	Custom,
+	Remon,
+};
+
+struct ServiceID {
+	static constexpr char* RTMP_Common = (char*)"rtmp_common";
+	static constexpr char* RTMP_Custom = (char*)"rtmp_custom";
+	static constexpr char* Remon = (char*)"remon";
+	static constexpr char* Error = (char*)"";
 };
 
 enum class Section : int {
@@ -30,6 +38,20 @@ enum class Section : int {
 inline bool OBSBasicSettings::IsCustomService() const
 {
 	return ui->service->currentData().toInt() == (int)ListOpt::Custom;
+}
+
+const char* OBSBasicSettings::GetServiceID() const
+{
+	switch( ui->service->currentData().toInt()) {
+		case (int)ListOpt::Custom:
+			return ServiceID::RTMP_Custom;
+		case (int)ListOpt::Remon:
+			return ServiceID::Remon;
+		case (int)ListOpt::ShowAll:
+			return ServiceID::Error;
+		default:
+			return ServiceID::RTMP_Common;
+	}
 }
 
 void OBSBasicSettings::InitStreamPage()
@@ -85,6 +107,18 @@ void OBSBasicSettings::LoadStream1Settings()
 		ui->authUsername->setText(QT_UTF8(username));
 		ui->authPw->setText(QT_UTF8(password));
 		ui->useAuth->setChecked(use_auth);
+
+	} else if (strcmp(type, ServiceID::Remon) == 0) {
+		ui->service->setCurrentIndex(1);
+		//ui->customServer->setText("http://10.10.10.10");
+
+		bool use_auth = obs_data_get_bool(settings, "use_auth");
+		const char *username = obs_data_get_string(settings, "username");
+		const char *password = obs_data_get_string(settings, "password");
+		ui->authUsername->setText(QT_UTF8(username));
+		ui->authPw->setText(QT_UTF8(password));
+		ui->useAuth->setChecked(use_auth);
+
 	} else {
 		int idx = ui->service->findText(service);
 		if (idx == -1) {
@@ -127,8 +161,7 @@ void OBSBasicSettings::LoadStream1Settings()
 
 void OBSBasicSettings::SaveStream1Settings()
 {
-	bool customServer = IsCustomService();
-	const char *service_id = customServer ? "rtmp_custom" : "rtmp_common";
+	const char *service_id = GetServiceID();
 
 	obs_service_t *oldService = main->GetService();
 	OBSData hotkeyData = obs_hotkeys_save_service(oldService);
@@ -137,12 +170,18 @@ void OBSBasicSettings::SaveStream1Settings()
 	OBSData settings = obs_data_create();
 	obs_data_release(settings);
 
-	if (!customServer) {
+	if ( service_id == ServiceID::RTMP_Common) {
 		obs_data_set_string(settings, "service",
 				    QT_TO_UTF8(ui->service->currentText()));
 		obs_data_set_string(
 			settings, "server",
 			QT_TO_UTF8(ui->server->currentData().toString()));
+
+	} else if ( service_id == ServiceID::Remon) {
+		obs_data_set_string(settings, "username",
+				QT_TO_UTF8(ui->authUsername->text()));
+		obs_data_set_string(settings, "password",
+				QT_TO_UTF8(ui->authPw->text()));
 	} else {
 		obs_data_set_string(settings, "server",
 				    QT_TO_UTF8(ui->customServer->text()));
@@ -177,10 +216,10 @@ void OBSBasicSettings::SaveStream1Settings()
 
 void OBSBasicSettings::UpdateKeyLink()
 {
-	bool custom = IsCustomService();
+	const char *service_id = GetServiceID();
 	QString serviceName = ui->service->currentText();
 
-	if (custom)
+	if ( service_id != ServiceID::RTMP_Common)
 		serviceName = "";
 
 	QString text = QTStr("Basic.AutoConfig.StreamPage.StreamKey");
@@ -257,6 +296,10 @@ void OBSBasicSettings::LoadServices(bool showAll)
 		0, QTStr("Basic.AutoConfig.StreamPage.Service.Custom"),
 		QVariant((int)ListOpt::Custom));
 
+	ui->service->insertItem(
+		1, "RemoteMonster",
+		QVariant((int)ListOpt::Remon));
+
 	if (!lastService.isEmpty()) {
 		int idx = ui->service->findText(lastService);
 		if (idx != -1)
@@ -281,8 +324,11 @@ void OBSBasicSettings::on_service_currentIndexChanged(int)
 		return;
 
 	std::string service = QT_TO_UTF8(ui->service->currentText());
-	bool custom = IsCustomService();
-
+	bool custom = false;
+	const char *service_id = GetServiceID();
+	if (service_id != ServiceID::RTMP_Common) {
+		custom = true;
+	}
 	ui->disconnectAccount->setVisible(false);
 	ui->bandwidthTestEnable->setVisible(false);
 
@@ -313,7 +359,12 @@ void OBSBasicSettings::on_service_currentIndexChanged(int)
 	ui->authPwLabel->setVisible(custom);
 	ui->authPwWidget->setVisible(custom);
 
-	if (custom) {
+	ui->serverLabel->setVisible(true);
+	ui->serverStackedWidget->setVisible(true);
+	ui->streamKeyLabel->setVisible(true);
+	ui->streamKeyWidget->setVisible(true);
+
+	if (service_id == ServiceID::RTMP_Custom) {
 		ui->streamkeyPageLayout->insertRow(1, ui->serverLabel,
 						   ui->serverStackedWidget);
 
@@ -321,6 +372,13 @@ void OBSBasicSettings::on_service_currentIndexChanged(int)
 		ui->serverStackedWidget->setVisible(true);
 		ui->serverLabel->setVisible(true);
 		on_useAuth_toggled();
+	} else if (service_id == ServiceID::Remon) {
+		ui->serverLabel->setVisible(false);
+		ui->serverStackedWidget->setVisible(false);
+		ui->streamKeyLabel->setVisible(false);
+		ui->streamKeyWidget->setVisible(false);
+
+		ui->useAuth->setVisible(false);
 	} else {
 		ui->serverStackedWidget->setCurrentIndex(0);
 	}
@@ -397,13 +455,12 @@ void OBSBasicSettings::on_authPwShow_clicked()
 
 OBSService OBSBasicSettings::SpawnTempService()
 {
-	bool custom = IsCustomService();
-	const char *service_id = custom ? "rtmp_custom" : "rtmp_common";
+	const char *service_id = GetServiceID();
 
 	OBSData settings = obs_data_create();
 	obs_data_release(settings);
 
-	if (!custom) {
+	if (service_id == ServiceID::RTMP_Common) {
 		obs_data_set_string(settings, "service",
 				    QT_TO_UTF8(ui->service->currentText()));
 		obs_data_set_string(

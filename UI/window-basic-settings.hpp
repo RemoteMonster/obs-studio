@@ -221,6 +221,7 @@ private:
 	/* stream */
 	void InitStreamPage();
 	inline bool IsCustomService() const;
+	const char* GetServiceID() const;
 	void LoadServices(bool showAll);
 	void OnOAuthStreamKeyConnected();
 	void OnAuthConnected();
